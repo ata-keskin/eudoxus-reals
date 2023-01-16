@@ -294,44 +294,6 @@ proof (rule ccontr, clarsimp, goal_cases)
   with assms show False using bounded_iff_finite_range by force
 qed
 
-lemma bounded_anti_symmetric:
-  assumes "\<forall>z. z < 0 \<longrightarrow> (f :: int \<Rightarrow> int) z = -f (-z)" "\<exists>C. \<forall>n \<ge> 0.\<bar>f n\<bar> \<le> C"
-  shows "bounded f"
-proof -
-  from assms(2) obtain C where C_bound: "\<forall>n \<ge> 0.\<bar>f n\<bar> \<le> C" by blast
-  show ?thesis
-  proof (rule boundedI[of _ C], goal_cases)
-    case (1 z)
-    show ?case
-    proof (cases "0 \<le> z")
-      case True
-      then show ?thesis using C_bound by blast
-    next
-      case False
-      hence "z < 0" by auto
-      with assms(1) C_bound 
-      show ?thesis by fastforce
-    qed
-  qed
-qed
-
-lemma finite_nonneg_bounded:
-  assumes "\<forall>n\<ge>N. (f :: int \<Rightarrow> int) n \<le> C"
-  shows "\<exists>C. \<forall>n\<ge>0. f n \<le> C"
-proof (cases "N \<ge> 0")
-  case True
-  define S where "S = (\<Union>n\<in>{0..N}. {f n})"
-  from assms have C_bound: "n \<in> {N..} \<Longrightarrow> f n \<le> C" for n by blast
-  from True have S_props: "bdd_above S" unfolding S_def by auto
-  have exceptions: "n \<in> {0..<N} \<Longrightarrow> f n \<le> Sup S" for n by (rule cSup_upper2[OF _ order.refl S_props]) (fastforce simp: S_def)
-  with C_bound have "n \<in> {0..} \<Longrightarrow> f n \<le> max C (Sup S)" for n by (metis atLeastLessThan_iff atLeast_iff leI max.coboundedI1 max.coboundedI2)
-  thus ?thesis by blast
-next
-  case False
-  hence "N \<le> 0" by force 
-  with assms show ?thesis by (meson dual_order.trans)
-qed
-
 lemma almost_hom_anti_symmetric: 
   assumes "\<forall>z. z < 0 \<longrightarrow> f z = -f (-z)" "\<exists>C. \<forall>m \<ge> 0. \<forall>n \<ge> 0. \<bar>f (m + n) - (f m + f n)\<bar> \<le> C"
   shows "almost_hom f"

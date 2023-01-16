@@ -46,16 +46,6 @@ lemma abs_real_inject:
   shows "f \<sim> g"
   using Quotient_rel[OF Quotient_real] assms by blast
 
-lemma real_relI:
-  assumes "f \<sim> f" "g \<sim> g" "bounded (f - g)"
-  shows "f \<sim> g"
-  using Quotient_rel[OF Quotient_real] assms by (simp add: fun_diff_def real_rel_def)
-
-lemma real_rel_compI:
-  assumes "f \<sim> f" "g \<sim> g" 
-  shows "(f o g) \<sim> (f o g)"
-  using assms almost_hom_comp by (blast intro: almost_hom_reflI refl_almost_homI)
-
 lemmas abs_real_eqI = Quotient_rel_abs[OF Quotient_real]
 lemmas rep_real_inverse = Quotient_rep_abs[OF Quotient_real, intro!]
 
@@ -686,7 +676,7 @@ fun real_inverse :: "(int \<Rightarrow> int) \<Rightarrow> (int \<Rightarrow> in
 
 (* TODO *)
 
-lemma pos_inverse_reflI: 
+lemma pos_inverse_refl: 
   fixes g f
   assumes f_refl: "f \<sim> f"
   shows "pos_inverse f \<sim> pos_inverse f"
@@ -709,43 +699,10 @@ lemmas real_rel_inverse = apply_rsp'[OF inverse_real.rsp, intro]
 
 (* TODO *)
 
-
 lemma real_inverse_uminus:
   assumes "f \<sim> f"
   shows "real_inverse (-f) \<sim> -real_inverse f"
-proof -
-  have "pos_inverse g \<sim> - pos_inverse (-g)" if "g \<sim> g" "real_positive g" for g sorry
-  thus ?thesis sorry
-qed
-
-
-lemma nonneg_bounded_real_rel_zeroI:
-  assumes "f \<sim> f" "\<forall>n \<ge> 0. \<bar>f n\<bar> \<le> C"
-  shows "f \<sim> (\<lambda>_.0)"
-proof (rule real_relI[OF assms(1) almost_hom_zero[THEN almost_hom_reflI]], rule ccontr, goal_cases)
-  case 1
-  with bounded_iff_finite_range have infinite: "infinite (range f)" by fastforce
-  from assms(2) have C_nonneg: "0 \<le> C" by force
-  from assms(1)[THEN refl_almost_homI]
-  obtain D where D_bound: "\<bar>f (m + n) - (f m + f n)\<bar> \<le> D" "0 \<le> D" for m n unfolding almost_hom_def by (fastforce elim: boundedE)
-  have "\<bar>f 0 - (f n + f (-n))\<bar> \<le> D" for n using D_bound(1)[of "n" "-n"] by fastforce
-  hence that: "\<bar>f n + f (-n)\<bar> \<le> D + \<bar>f 0\<bar>" for n by (meson abs_triangle_ineq2_sym diff_add_eq_diff_diff_swap diff_eq_diff_less_eq order_trans)
-  have "\<bar>f (-n)\<bar> \<le> D + \<bar>f 0\<bar> + \<bar>f n\<bar>" for n using that[of n] by linarith
-  hence "\<forall>n \<ge> 0. \<bar>f (-n)\<bar> \<le> D + \<bar>f 0\<bar> + \<bar>f n\<bar> \<and> \<bar>f n\<bar> \<le> C" using assms(2) by blast
-  hence "\<forall>n \<ge> 0. \<bar>f (-n)\<bar> \<le> D + \<bar>f 0\<bar> + C" by fastforce
-  with D_bound(2) C_nonneg assms(2) have "\<forall>n. \<bar>f n\<bar> \<le> D + \<bar>f 0\<bar> + C" by (metis abs_eq_iff' add.commute add_increasing2)
-  with infinite show ?case using bounded_alt_def bounded_iff_finite_range by blast
-qed
-
-lemma nonneg_bounded_real_rel_zeroI2:
-  assumes "f \<sim> f" "g \<sim> g" "\<forall>n \<ge> 0. \<bar>real_add f (-g) n\<bar> \<le> C"
-  shows "f \<sim> g"
-proof -
-  from assms have "(real_add f (-g)) \<sim> (\<lambda>_.0)" by (subst nonneg_bounded_real_rel_zeroI, blast, auto)
-  hence "abs_real f - abs_real g = abs_real (\<lambda>_.0)" by (metis abs_real_eqI assms(1,2) real_diff_abs)
-  hence "abs_real f = abs_real g" using zero_real_def by simp
-  thus ?thesis using abs_real_inject assms(1, 2) by blast
-qed
+  sorry
 
 lemma real_inverse_abs:
   assumes f_refl: "f \<sim> f" and f_non_zero: "\<not>(f \<sim> (\<lambda>_.0))"
@@ -760,47 +717,7 @@ proof (auto simp del: real_inverse.simps simp add: inverse_real_def,
   then show ?case by (metis f_refl inverse_real.rsp real_mult.elims real_rel_mult rel_funD rep_real_inverse)
 next
   case 2
-  have rel: "real_inverse g \<circ> g \<sim> id" if "g \<sim> g" "\<not>(g \<sim> (\<lambda>_.0))" "real_positive g" for g
-  proof -
-    define h where "h = (\<lambda>z. Inf ({0..} \<inter> {na. z \<le> g na}))"
-    from that(2,3) have eq: "real_inverse g = pos_inverse g" by simp
-
-    from that(3) obtain N where N_def: "\<forall>n\<ge>N. 1 \<le> g n" by fastforce
-    from that(3) have inv_g_wd: "\<forall>n. \<exists>y \<ge> 0. n \<le> g y" by (metis linorder_linear order_trans real_positive.simps)
-
-    have bdd_below: "bdd_below ({0..} \<inter> {na. n \<le> g na})" for n by force
-    have not_empty: "{0..} \<inter> {na. n \<le> g na} \<noteq> {}" for n using inv_g_wd by fast
-    then have h_n_is: "h n \<in> {0..} \<inter> {na. n \<le> g na}" for n unfolding h_def by (rule nonneg_int_InfI) 
-    then have g_h_less: "n \<le> g (h n)" for n by fast
-
-    obtain M where M_def: "\<forall>n \<ge> M. 1 \<le> h n" unfolding h_def by (metis IntE add1_zle_eq atLeast_def h_def h_n_is int_one_le_iff_zero_less linorder_not_less mem_Collect_eq nle_le)
-
-    have inv_less:" h z \<le> n" if "n \<ge> 0" "z \<le> g n" for n z unfolding h_def using cInf_lower[OF _ bdd_below] that by blast
-    have inv_le: "z > g n" if "n \<ge> 0" "h z > n" for n z using inv_less that linorder_not_less by auto
-
-    from that(1)[THEN refl_almost_homI] 
-    obtain C where C_bounds: "\<bar>g (m + n) - (g m + g n)\<bar> \<le> C" "0 \<le> C" for m n unfolding almost_hom_def by (fastforce elim: boundedE)
-
-    have bounds: "\<forall>n \<ge> max (max 1 N) M. \<bar>g (pos_inverse g n) - n\<bar> \<le> \<bar>C - g (- 1)\<bar>"
-    proof (clarsimp, goal_cases)
-      case (1 n)
-      hence n_props: "n \<ge> 1" "n \<ge> N" "n \<ge> M" by blast+
-      then have sgn_g: "sgn (g n) = 1" "\<bar>n\<bar> = n" using N_def by fastforce+
-
-      from M_def n_props(3) have p0: "0 \<le> h n - 1" by fastforce
-      from g_h_less have "n \<le> g (h n)" by simp
-      moreover have "g (h n - 1) < n" by (rule inv_le[OF p0], simp)
-
-      moreover from C_bounds(1)[of "h n" "- 1", simplified] 
-      have "g (h n) - C + g (- 1) \<le> g (h n - 1)" by linarith
-      ultimately have t: "n \<in> {g (h n) - C + g (- 1)..g (h n)}" by fastforce
-      then show ?case unfolding h_def using n_props(1) by fastforce
-    qed
-    from finite_nonneg_bounded[OF this] obtain D where D_bounds: "\<forall>n\<ge>0. \<bar>g (pos_inverse g n) - n\<bar> \<le> D" by blast
-    from D_bounds 
-    have "g o pos_inverse g \<sim> id" by (subst nonneg_bounded_real_rel_zeroI2[OF real_rel_compI[OF that(1) pos_inverse_reflI[OF that(1)]] almost_hom_one[THEN almost_hom_reflI], of D], auto)
-    with eq show ?thesis by (metis (full_types) Quotient_real Quotient_rel inverse_real.rsp real_mult.elims real_mult_commute real_rel_compI rel_funD2 that(1))
-  qed
+  have rel: "real_inverse g \<circ> g \<sim> id " if "g \<sim> g" "\<not>(g \<sim> (\<lambda>_.0))" "real_positive g" for g sorry
   show ?case
   proof (cases "real_positive f")
     case True
@@ -828,7 +745,7 @@ proof
         subst real_mult_abs(1)[symmetric, simplified, of "real_sgn (rep_real 0)"],
         force,
         simp only: zero_real_def id_apply,
-        rule pos_inverse_reflI[of "rep_real (abs_real (\<lambda>_.0))", simplified])
+        rule pos_inverse_refl[of "rep_real (abs_real (\<lambda>_.0))", simplified])
        (fastforce simp: sgn_zero_iff[of 0, unfolded sgn_real_def map_fun_def comp_def, simplified])
 qed
 
