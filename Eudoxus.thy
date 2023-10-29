@@ -1,5 +1,8 @@
+(*  Author: Ata Keskin, TU München 
+*)
+
 theory Eudoxus
-  imports Slope HOL.Archimedean_Field
+  imports Slope
 begin
 
 section \<open>Eudoxus Reals\<close>
@@ -52,11 +55,40 @@ declare Quotient_abs_rep[OF Quotient_real, simp]
 
 lemma slope_rep_real: "slope (rep_real x)" by simp
 
-lemma real_eqI:
-  assumes "\<And>n. \<bar>rep_real x n - rep_real y n\<bar> \<le> C"
-  shows "x = y"
-  using assms boundedI
-  by (subst Quotient_rel_rep[OF Quotient_real, THEN iffD1, unfolded eudoxus_rel_def]) force+
+lemma eudoxus_relI:
+  assumes "slope f" "slope g" "\<And>n. n \<ge> N \<Longrightarrow> \<bar>f n - g n\<bar> \<le> C"
+  shows "f \<sim>\<^sub>e g"
+proof -
+  have C_nonneg: "C \<ge> 0" using assms by force
+
+  obtain C_f where C_f: "\<bar>f (n + (- n)) - (f n + f (- n))\<bar> \<le> C_f" "0 \<le> C_f" for n using assms by fast
+
+  obtain C_g where C_g: "\<bar>g (n + (- n)) - (g n + g (- n))\<bar> \<le> C_g" "0 \<le> C_g" for n using assms by fast
+  
+  have bound: "\<bar>f (- n) - g (- n)\<bar> \<le> \<bar>f n - g n\<bar> + \<bar>f 0\<bar> + \<bar>g 0\<bar> + C_f + C_g" for n using C_f(1)[of n] C_g(1)[of n] by simp
+
+  define C' where "C' = Sup {\<bar>f n - g n\<bar> | n. n \<in> {0..max 0 N}} + C + \<bar>f 0\<bar> + \<bar>g 0\<bar> + C_f + C_g"
+  have *: "bdd_above {\<bar>f n - g n\<bar> |n. n \<in> {0..max 0 N}}" by simp
+  have "Sup {\<bar>f n - g n\<bar> |n. n \<in> {0..max 0 N}} \<in> {\<bar>f n - g n\<bar> |n. n \<in> {0..max 0 N}}" using C_nonneg by (intro int_Sup_mem[OF _ *]) auto
+  hence Sup_nonneg: "Sup {\<bar>f n - g n\<bar> | n. n \<in> {0..max 0 N}} \<ge> 0" by fastforce
+
+  have *: "\<bar>f n - g n\<bar> \<le> Sup {\<bar>f n - g n\<bar> | n. n \<in> {0..max 0 N}} + C" if "n \<ge> 0" for n unfolding C'_def using cSup_upper[OF _ *] that C_nonneg Sup_nonneg by (cases "n \<le> N") (fastforce simp add: add.commute add_increasing2 assms(3))+
+  {
+    fix n
+    have "\<bar>f n - g n\<bar> \<le> C'"
+    proof (cases "n \<ge> 0")
+      case True
+      thus ?thesis unfolding C'_def using * C_f C_g by fastforce
+    next
+      case False
+      hence "- n \<ge> 0" by simp
+      hence "\<bar>f (- n) - g (- n)\<bar> \<le> Sup {\<bar>f n - g n\<bar> | n. n \<in> {0..max 0 N}} + C" using *[of "- n"] by blast
+      hence "\<bar>f (- (- n)) - g (- (- n))\<bar> \<le> C'" unfolding C'_def using bound[of "- n"] by linarith
+      thus ?thesis by simp
+    qed
+  }
+  thus ?thesis using assms unfolding eudoxus_rel_def by (auto intro: boundedI)
+qed
 
 subsection \<open>Addition and Subtraction\<close>
 
@@ -249,6 +281,8 @@ proof
   qed
 qed
 
+subsection \<open>Ordering\<close>
+
 text \<open>We call a slope positive, if it tends to infinity. Similarly, we call a slope negative if it tends to negative infinity.\<close>
 instantiation real :: "{ord, abs, sgn}"
 begin
@@ -258,7 +292,7 @@ definition pos :: "(int \<Rightarrow> int) \<Rightarrow> bool" where
 
 definition neg :: "(int \<Rightarrow> int) \<Rightarrow> bool" where
   "neg f = (\<forall>C \<ge> 0. \<exists>N. \<forall>n \<ge> N. f n \<le> -C)"
-
+                                  
 lemma pos_neg_exclusive: "\<not> (pos f \<and> neg f)" unfolding neg_def pos_def by (metis int_one_le_iff_zero_less linorder_not_less nle_le uminus_int_code(1) zero_less_one_class.zero_le_one)
 
 lemma pos_iff_neg_uminus: "pos f = neg (-\<^sub>e f)" unfolding neg_def pos_def eudoxus_uminus_def by simp
@@ -454,7 +488,7 @@ lemmas sgn_pos = sgn_abs_real_one_iff[THEN iffD2, simp]
 
 lemma sgn_one[simp]: "sgn (1 :: real) = 1" by (subst one_def) (fastforce simp add: pos_def iff: sgn_abs_real_one_iff)
 
-lemma sgn_abs_real_neg_one_iff: 
+lemma sgn_abs_real_neg_one_iff:
   assumes "slope f"
   shows "sgn (abs_real f) = - 1 \<longleftrightarrow> neg f"
   using eudoxus_sgn_cong[OF rep_real_abs_real_refl, OF assms] abs_real_eqI eudoxus_sgn_def neg_one_def one_def zero_def pos_neg_exclusive
@@ -528,6 +562,72 @@ lemma sgn_plus':
   shows "sgn (x + y) = -1"
   using assms sgn_uminus[of x] sgn_uminus[of y] sgn_uminus[of "x + y"] sgn_plus[of "- x" "- y"]
   by (simp add: equation_minus_iff)
+
+lemma pos_dual_def: 
+  assumes "slope f"
+  shows "pos f = (\<forall>C \<ge> 0. \<exists>N. \<forall>n \<le> N. f n \<le> -C)"
+proof-
+  have "pos f = neg (f *\<^sub>e (-\<^sub>e id))" by (metis abs_real_eq_iff abs_real_times add.inverse_inverse assms eudoxus_times_commute mult_minus1_right neg_one_def sgn_abs_real_neg_one_iff sgn_abs_real_one_iff sgn_uminus slope_neg_one)
+  also have "... = (\<forall>C \<ge> 0. \<exists>N. \<forall>n \<ge> N. (f (- n)) \<le> -C)" unfolding neg_def eudoxus_times_def eudoxus_uminus_def by simp
+  also have "... = (\<forall>C \<ge> 0. \<exists>N. \<forall>n \<le> N. f n \<le> -C)" by (metis add.inverse_inverse minus_le_iff)
+  finally show ?thesis .
+qed
+
+lemma neg_dual_def:
+  assumes "slope f"
+  shows "neg f = (\<forall>C \<ge> 0. \<exists>N. \<forall>n \<le> N. f n \<ge> C)"
+  unfolding neg_iff_pos_uminus using assms by (subst pos_dual_def) (auto simp add: eudoxus_uminus_def)
+
+lemma pos_representative:
+  assumes "slope f" "pos f"
+  obtains g where "f \<sim>\<^sub>e g" "\<And>n. n \<ge> N \<Longrightarrow> g n \<ge> C"
+proof -
+  obtain N' where N': "\<forall>z\<ge>N'. f z \<ge> max 0 C" using assms unfolding pos_def by (meson max.cobounded1)
+  have *: "1 = abs_real (\<lambda>x. x + N' - N)" "slope (\<lambda>x. x + N' - N)" unfolding one_def by (intro abs_real_eqI) (auto simp add: eudoxus_rel_def slope_def intro!: boundedI)
+  hence "abs_real f * 1 = abs_real (f *\<^sub>e (\<lambda>x. x + N' - N))" using abs_real_times[OF assms(1) *(2)] by simp
+  hence "f \<sim>\<^sub>e (f *\<^sub>e (\<lambda>x. x + N' - N))" using assms * by (metis abs_real_eq_iff eudoxus_times_commute mult.right_neutral)
+  moreover have "\<forall>z\<ge>N. (f *\<^sub>e (\<lambda>x. x + N' - N)) z \<ge> C" unfolding eudoxus_times_def using N' by simp
+  ultimately show ?thesis using that by blast
+qed
+
+lemma pos_representative':
+  assumes "slope f" "pos f"
+  obtains g where "f \<sim>\<^sub>e g" "\<And>n. g n \<ge> C \<Longrightarrow> n \<ge> N"
+proof -
+  obtain N' where  "\<forall>z \<le> N'. f z \<le> - (max 0 (- C) + 1)" using assms unfolding pos_dual_def[OF assms(1)] by (metis max.cobounded1 add_increasing2 zero_less_one_class.zero_le_one)
+  hence N': "\<forall>z \<le> N'. f z < min 0 C" by fastforce
+  have *: "1 = abs_real (\<lambda>x. x + N' - N)" "slope (\<lambda>x. x + N' - N)" unfolding one_def by (intro abs_real_eqI) (auto simp add: eudoxus_rel_def slope_def intro!: boundedI)
+  hence "abs_real f * 1 = abs_real (f *\<^sub>e (\<lambda>x. x + N' - N))" using abs_real_times[OF assms(1) *(2)] by simp
+  hence "f \<sim>\<^sub>e (f *\<^sub>e (\<lambda>x. x + N' - N))" using assms * by (metis abs_real_eq_iff eudoxus_times_commute mult.right_neutral)
+  moreover have "\<forall>z<N. (f *\<^sub>e (\<lambda>x. x + N' - N)) z < C" unfolding eudoxus_times_def using N' by simp
+  ultimately show ?thesis using that by (meson linorder_not_less)
+qed
+
+lemma neg_representative:
+  assumes "slope f" "neg f"
+  obtains g where "f \<sim>\<^sub>e g" "\<And>n. n \<ge> N \<Longrightarrow> g n \<le> - C"
+proof -
+  obtain N' where "\<forall>z\<ge>N'. f z \<le> - max 0 C" using assms unfolding neg_def by (meson max.cobounded1)
+  hence N': "\<forall>z\<ge>N'. f z \<le> min 0 (- C)" by force
+  have *: "1 = abs_real (\<lambda>x. x + N' - N)" "slope (\<lambda>x. x + N' - N)" unfolding one_def by (intro abs_real_eqI) (auto simp add: eudoxus_rel_def slope_def intro!: boundedI)
+  hence "abs_real f * 1 = abs_real (f *\<^sub>e (\<lambda>x. x + N' - N))" using abs_real_times[OF assms(1) *(2)] by simp
+  hence "f \<sim>\<^sub>e (f *\<^sub>e (\<lambda>x. x + N' - N))" using assms * by (metis abs_real_eq_iff eudoxus_times_commute mult.right_neutral)
+  moreover have "\<forall>z\<ge>N. (f *\<^sub>e (\<lambda>x. x + N' - N)) z \<le> - C" unfolding eudoxus_times_def using N' by simp
+  ultimately show ?thesis using that by blast
+qed
+
+lemma neg_representative':
+  assumes "slope f" "neg f"
+  obtains g where "f \<sim>\<^sub>e g" "\<And>n. g n \<le> - C \<Longrightarrow> n \<ge> N"
+proof -
+  obtain N' where "\<forall>z \<le> N'. f z \<ge> max 0 (- C) + 1" using assms unfolding neg_dual_def[OF assms(1)] by (metis max.cobounded1 add_increasing2 zero_less_one_class.zero_le_one)
+  hence N': "\<forall>z \<le> N'. f z > max 0 (- C)" by fastforce
+  have *: "1 = abs_real (\<lambda>x. x + N' - N)" "slope (\<lambda>x. x + N' - N)" unfolding one_def by (intro abs_real_eqI) (auto simp add: eudoxus_rel_def slope_def intro!: boundedI)
+  hence "abs_real f * 1 = abs_real (f *\<^sub>e (\<lambda>x. x + N' - N))" using abs_real_times[OF assms(1) *(2)] by simp
+  hence "f \<sim>\<^sub>e (f *\<^sub>e (\<lambda>x. x + N' - N))" using assms * by (metis abs_real_eq_iff eudoxus_times_commute mult.right_neutral)
+  moreover have "\<forall>z < N. (f *\<^sub>e (\<lambda>x. x + N' - N)) z > - C" unfolding eudoxus_times_def using N' by simp
+  ultimately show ?thesis using that by (meson linorder_not_less)
+qed
                    
 text \<open>We call a real \<^term>\<open>x\<close> less than another real \<^term>\<open>y\<close>, if their difference is positive.\<close>
 definition
@@ -610,7 +710,9 @@ proof -
   thus ?thesis using that by fastforce
 qed
 
-text \<open>We now define the multiplicative inverse, by constructing a candidate first for positive slopes, and then by extending it to the entire domain using the choice function. \<close>
+subsection \<open>Multiplicative Inverse\<close>
+
+text \<open>We now define the multiplicative inverse. We start by constructing a candidate for positive slopes first and then extend it to the entire domain using the choice function \<^term>\<open>Eps\<close>.\<close>
 instantiation real :: "{inverse}"
 begin
 
@@ -622,24 +724,102 @@ lemma eudoxus_pos_inverse:
   obtains g where "f \<sim>\<^sub>e g" "slope (eudoxus_pos_inverse g)" "eudoxus_pos_inverse g *\<^sub>e f \<sim>\<^sub>e id" 
 proof -
   let ?\<phi> = eudoxus_pos_inverse
-  have "?\<phi> f n \<le> m" if "n \<le> f m" "n \<ge> 0" "m \<ge> 0" for n m sorry
-  define g :: "int \<Rightarrow> int" where "g = undefined"
-  { 
-    fix f 
-    assume "slope f" "pos f"
-    assume "?\<phi> f m - 1 > 0" if "m > 0" for m
-    have *: "\<exists>N. \<forall>n\<ge> 0. \<forall>m \<ge> 0. \<bar>?\<phi> f (n + m) - (?\<phi> f n + ?\<phi> f m)\<bar> \<le> N" sorry
-    moreover have "?\<phi> f (- x) = - ?\<phi> f x" for x unfolding eudoxus_pos_inverse_def by simp
-    ultimately have "\<exists>N. \<forall>n m. \<bar>?\<phi> f (n + m) - (?\<phi> f n + ?\<phi> f m)\<bar> \<le> N" sorry
-    hence "bounded (\<lambda>(n, m). ?\<phi> f (n + m) - (?\<phi> f n + ?\<phi> f m))" unfolding bounded_def bdd_above_def by (auto split: prod.splits)
+  obtain g where g: "f \<sim>\<^sub>e g" "g z \<ge> 0 \<Longrightarrow> z > 1" for z using pos_representative'[OF assms] by (metis gt_ex order_less_le_trans)
+  hence pos_g: "pos g" using assms pos_cong by blast
+  have slope_g: "slope g" using g unfolding eudoxus_rel_def by simp
+
+  have "\<exists>n \<ge> 0. g n \<ge> \<bar>z\<bar>" for z using pos_g unfolding pos_def by (metis abs_ge_self order_less_imp_le zero_less_abs_iff)
+  hence nonempty_\<phi>: "{0..} \<inter> {n. \<bar>z\<bar> \<le> g n} \<noteq> {}" for z by blast
+  have bdd_below_\<phi>: "bdd_below ({0..} \<inter> {n. g n \<ge> \<bar>z\<bar>})" for z by simp
+  have \<phi>_bound: "g n \<ge> z \<Longrightarrow> ?\<phi> g z \<le> n" if "z \<ge> 0" "n \<ge> 0" for n z unfolding eudoxus_pos_inverse_def using cInf_lower[OF _ bdd_below_\<phi>, of n z] that abs_of_nonneg zsgn_def by simp
+  hence \<phi>_bound': "?\<phi> g z > n \<Longrightarrow> g n < z" if "z \<ge> 0" "n \<ge> 0" for z n using that linorder_not_less by blast
+
+  have \<phi>_mem: "z > 0 \<Longrightarrow> ?\<phi> g z \<in> {0..} \<inter> {n. g n \<ge> \<bar>z\<bar>}" for z unfolding eudoxus_pos_inverse_def using int_Inf_mem[OF nonempty_\<phi> bdd_below_\<phi>, of z] by simp
+
+  obtain L where "\<bar>g (1 + (z - 1)) - (g 1 + g (z - 1))\<bar> \<le> L" for z using slope_g by fast
+  hence *: "\<bar>g z - (g 1 + g (z - 1))\<bar> \<le> L" for z by simp
+  hence L: "g z \<le> g (z - 1) + (L + g 1)" for z using abs_le_D1 *[of z] by linarith
+
+  let ?\<gamma> = "\<lambda>m n. (g (m + (- n)) - (g m + g (- n))) - (g (n + (- n)) - (g n + g (- n))) + g 0"
+  
+  obtain c where c: "\<bar>g (m + (- n)) - (g m + g (- n))\<bar> \<le> c" for m n using slope_g by fast
+  obtain c' where c': "\<bar>g (n + (- n)) - (g n + g (- n))\<bar> \<le> c'" for n using slope_g by fast
+  have "\<bar>?\<gamma> m n\<bar> \<le> \<bar>g (m + (- n)) - (g m + g (- n))\<bar> + \<bar>g (n + (- n)) - (g n + g (- n))\<bar> + \<bar>g 0\<bar>" for m n by linarith
+  hence *: "\<bar>?\<gamma> m n\<bar> \<le> c + c' + \<bar>g 0\<bar>" for m n using c[of m n] c'[of n] by linarith
+
+  define C where "C = 2 * (c + c' + \<bar>g 0\<bar>)"
+  have "g (m - (n + p)) - (g m - (g n + g p)) = ?\<gamma> (m - n) p + ?\<gamma> m n" for m n p by (simp add: algebra_simps)
+  hence "\<bar>g (m - (n + p)) - (g m - (g n + g p))\<bar> \<le> (c + c' + \<bar>g 0\<bar>) + (c + c' + \<bar>g 0\<bar>)" for m n p using *[of "m - n" p] *[of m n] by simp
+  hence *: "\<bar>g (m - (n + p)) - (g m - (g n + g p))\<bar> \<le> C" for m n p unfolding C_def by (metis mult_2)
+  have C: "g (m - (n + p)) \<le> g m - (g n + g p) + C" "g m - (g n + g p) + (- C) \<le> g (m - (n + p))" for m n p using *[of m n p] abs_le_D1 abs_le_D2 by linarith+
+
+  have bounded: "bounded h" if bounded: "bounded (g o h)" for h :: "'a \<Rightarrow> int"
+  proof (rule ccontr)
+    assume asm: "\<not> bounded h"
+    obtain C where C: "\<bar>g (h z)\<bar> \<le> C" "C \<ge> 0" for z using bounded by fastforce
+    obtain N where N: "g z \<ge> C + 1" if "z \<ge> N" for z using C pos_g unfolding pos_def by fastforce
+    obtain N' where N': "g z \<le> - (C + 1)" if "z \<le> N'" for z using C pos_g unfolding pos_dual_def[OF slope_g] by (meson add_increasing2 linordered_nonzero_semiring_class.zero_le_one)
+    obtain z where "\<bar>h z\<bar> > max \<bar>N\<bar> \<bar>N'\<bar>" using asm unfolding bounded_alt_def by (meson leI)
+    hence "h z \<in> {..N'} \<union> {N..}" by fastforce
+    hence "g (h z) \<in> {..- (C + 1)} \<union> {C + 1..}" using N N' by blast
+    hence "\<bar>g (h z)\<bar> \<ge> C + 1" by fastforce
+    thus False using C(1)[of z] by simp
+  qed
+
+  define D where "D = max \<bar>- (C + (L + g 1) + (L + g 1))\<bar> \<bar>C + L + g 1\<bar>"
+  {
+    fix m n :: int
+    assume asm: "m > 0" "n > 0"
+
+    have "g (?\<phi> g m) \<ge> m" using \<phi>_mem asm by simp
+    moreover have "?\<phi> g m > 1" using calculation g asm by simp
+    moreover have "m > g (?\<phi> g m - 1)" using asm calculation by (intro \<phi>_bound') auto
+    ultimately have m: "m \<in> {g (?\<phi> g m - 1)<..g (?\<phi> g m)}" by simp
+
+    have "g (?\<phi> g n) \<ge> n" using \<phi>_mem asm by simp
+    moreover have "?\<phi> g n > 1" using calculation g asm by simp
+    moreover have "n > g (?\<phi> g n - 1)" using asm calculation by (intro \<phi>_bound') auto
+    ultimately have n: "n \<in> {g (?\<phi> g n - 1)<..g (?\<phi> g n)}" by simp
+
+    have "g (?\<phi> g (m + n)) \<ge> m + n" using \<phi>_mem asm by simp
+    moreover have "?\<phi> g (m + n) > 1" using calculation g asm by simp
+    moreover have "(m + n) > g (?\<phi> g (m + n) - 1)" using asm calculation by (intro \<phi>_bound') auto
+    ultimately have m_n: "m + n \<in> {g (?\<phi> g (m + n) - 1)<..g (?\<phi> g (m + n))}" by simp
+
+    have *: "g (?\<phi> g (m + n)) - (g (?\<phi> g m - 1) + g (?\<phi> g n - 1)) > 0" "g (?\<phi> g (m + n) - 1) - (g (?\<phi> g m) + g (?\<phi> g n)) < 0" using m_n m n by simp+
+    
+    have "g (?\<phi> g (m + n) - (?\<phi> g m + ?\<phi> g n)) \<le> g (?\<phi> g (m + n)) - (g (?\<phi> g m) + g (?\<phi> g n)) + C" using C by blast
+    also have "... \<le> g (?\<phi> g (m + n) - 1) - g (?\<phi> g m) - g (?\<phi> g n) + (C + L + g 1)" using L by fastforce
+    finally have upper: "g (?\<phi> g (m + n) - (?\<phi> g m + ?\<phi> g n)) \<le> C + L + g 1" using * by fastforce
+
+    have "- (C + (L + g 1) + (L + g 1)) \<le> g (?\<phi> g (m + n)) - g (?\<phi> g m - 1) - g (?\<phi> g n - 1) - (C + (L + g 1) + (L + g 1))" using * by linarith
+    also have "... \<le> g (?\<phi> g (m + n)) - (g (?\<phi> g m) + g (?\<phi> g n)) + (- C)" using L[THEN le_imp_neg_le, of "?\<phi> g m"] L[THEN le_imp_neg_le, of "?\<phi> g n"] by linarith
+    also have "... \<le> g (?\<phi> g (m + n) - (?\<phi> g m + ?\<phi> g n))" using C by blast
+    finally have lower: "- (C + (L + g 1) + (L + g 1)) \<le> g (?\<phi> g (m + n) - (?\<phi> g m + ?\<phi> g n))" .
+
+    have "\<bar>g (?\<phi> g (m + n) - (?\<phi> g m + ?\<phi> g n))\<bar> \<le> D" using upper lower unfolding D_def by simp
   }
-  moreover have "slope g" sorry
-  moreover have "pos g" sorry
-  moreover have "?\<phi> g m - 1 > 0" if "m > 0" for m sorry
-  moreover have "slope (?\<phi> g)" unfolding slope_def using calculation by blast
-  moreover have "f \<sim>\<^sub>e g" unfolding eudoxus_rel_def using assms calculation apply simp sorry
-  moreover have "eudoxus_pos_inverse g *\<^sub>e g \<sim>\<^sub>e id" sorry
-  ultimately show ?thesis by (meson that eudoxus_rel_trans eudoxus_times_cong slope_reflI)
+  hence "bounded (g o (\<lambda>(m, n). ?\<phi> g (m + n) - (?\<phi> g m + ?\<phi> g n)) o (\<lambda>(m, n). (max 1 m, max 1 n)))" by (intro boundedI[of _ D]) auto
+  hence "bounded ((\<lambda>(m, n). ?\<phi> g (m + n) - (?\<phi> g m + ?\<phi> g n)) o (\<lambda>(m, n). (max 1 m, max 1 n)))" by (metis (mono_tags, lifting) bounded comp_assoc)
+  then obtain C where "\<bar>((\<lambda>(m, n). ?\<phi> g (m + n) - (?\<phi> g m + ?\<phi> g n)) o (\<lambda>(m, n). (max 1 m, max 1 n))) (m, n)\<bar> \<le> C" for m n by blast
+  hence "\<bar>?\<phi> g (m + n) - (?\<phi> g m + ?\<phi> g n)\<bar> \<le> C" if "m \<ge> 1" "n \<ge> 1" for m n using that[THEN max_absorb2] by (metis (no_types, lifting) comp_apply prod.case)
+  hence slope: "slope (?\<phi> g)" by (intro slope_odd[of _ C]) (auto simp add: eudoxus_pos_inverse_def)
+  moreover 
+  {
+    obtain C where C: "\<bar>g ((?\<phi> g n - 1) + 1) - (g (?\<phi> g n - 1) + g 1)\<bar> \<le> C" for n using slope_g by fast
+    have C_bound: "g (?\<phi> g n - 1) \<ge> g (?\<phi> g n) - (\<bar>g 1\<bar> + C)" for n using C[of n] by fastforce
+    {
+      fix n :: int
+      assume asm: "n > 0"
+      have upper: "g (?\<phi> g n) \<ge> n" using \<phi>_mem asm by simp
+      moreover have "?\<phi> g n > 1" using calculation g asm by simp
+      moreover have "n > g (?\<phi> g n - 1)" using calculation asm by (intro \<phi>_bound') auto
+      moreover have "n \<ge> g (?\<phi> g n) - (\<bar>g 1\<bar> + C)" using calculation C_bound[of n] by force
+      ultimately have "\<bar>g (?\<phi> g n) - n\<bar> \<le> \<bar>g 1\<bar> + C" by simp
+    }
+    hence id: "g *\<^sub>e ?\<phi> g \<sim>\<^sub>e id" using slope_g slope by (intro eudoxus_relI[of _ _ 1 "\<bar>g 1\<bar> + C"]) (auto simp add: eudoxus_times_def)
+  }
+  ultimately show ?thesis using g that eudoxus_rel_trans eudoxus_times_cong slope_reflI eudoxus_times_commute[OF slope slope_g] by metis
 qed  
 
 definition eudoxus_inverse :: "(int \<Rightarrow> int) \<Rightarrow> (int \<Rightarrow> int)" where
@@ -787,6 +967,8 @@ proof
   qed
 qed
 
+subsection \<open>Completeness\<close>
+
 text \<open>To show that the Eudoxus reals are complete, we first introduce the floor function.\<close>
 instantiation real :: floor_ceiling
 begin
@@ -836,7 +1018,6 @@ proof (cases "\<exists>u \<in> S. \<forall>s \<in> S. s \<le> u")
 
   have u_mem: "u z \<in> (\<lambda>x. sgn z * \<lfloor>of_int \<bar>z\<bar> * x\<rfloor>) ` S" for z unfolding u_def  using int_Sup_mem[OF _ bdd_above_u, of z] assms by auto
 
-  
   have slope: "slope u"
   proof -
     {
