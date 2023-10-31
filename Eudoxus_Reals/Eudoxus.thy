@@ -15,7 +15,7 @@ definition eudoxus_rel :: "(int \<Rightarrow> int) \<Rightarrow> (int \<Rightarr
 
 lemma eudoxus_rel_equivp:
   "part_equivp eudoxus_rel"
-proof (auto intro!: part_equivpI)
+proof (rule part_equivpI)
   show "\<exists>x. x \<sim>\<^sub>e x" unfolding eudoxus_rel_def slope_def bounded_def by fast
   show "symp (\<sim>\<^sub>e)"  unfolding eudoxus_rel_def by (force intro: sympI dest: bounded_uminus simp: fun_Compl_def) 
   show "transp (\<sim>\<^sub>e)"  unfolding eudoxus_rel_def by (force intro!: transpI dest: bounded_add)
